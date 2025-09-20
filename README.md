@@ -11,7 +11,7 @@ Follow these steps to set up and run the project:
 
 - **Gemini CLI**: Download and install from [Gemini CLI GitHub].
 - **ngrok**: Download from [ngrok.com](https://ngrok.com/download).
-- **uv**: Download from [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv).
+- **uv**: pip install uv
 - **Python dependencies**: Install using `uv` (see below).
 - **Stytch Project**: Set up a Stytch project at [Stytch Dashboard](https://stytch.com/dashboard).
 

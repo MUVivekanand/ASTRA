@@ -5,8 +5,7 @@ import App from './App.jsx'
 import { StytchProvider } from '@stytch/react';
 import { createStytchUIClient } from '@stytch/react/ui';
 
-
-const stytch = createStytchUIClient('');
+const stytch = createStytchUIClient("Your Public Token Here");
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
