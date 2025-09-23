@@ -1,12 +1,9 @@
-"""MCP Server with GitHub/Git integration tools."""
-
-import os
-
 import os
 import tempfile
 import shutil
 from typing import TypedDict, List, Optional, Dict, Any
 from dotenv import load_dotenv
+import httpx
 from starlette.requests import Request as StarletteRequest
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware import Middleware
@@ -23,6 +20,7 @@ from starlette.middleware import Middleware
 from starlette.responses import JSONResponse
 from fastmcp.server.auth import BearerAuthProvider
 from fastmcp.server.dependencies import get_access_token, AccessToken
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from pydantic import BaseModel, Field
 from fastmcp import FastMCP
@@ -44,6 +42,67 @@ GITHUB_API_BASE = os.getenv('GITHUB_API_BASE')
 
 print(f"Using GitHub API Base:", GITHUB_API_BASE)
 print(f"Using GitHub Token:", GITHUB_TOKEN)
+
+OPA_SERVER_URL = "http://localhost:8181/v1/data/policies/main"
+
+# Custom middleware to enforce policies using OPA
+class OPAMiddleware:
+    """
+    Middleware that sends tool call information to an OPA server for authorization.
+    """
+    def __init__(self, app: ASGIApp):
+        self.app = app
+        self.client = httpx.AsyncClient()
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        # Only process requests that have the required tool call header
+        if scope["type"] == "http" and "x-mcp-tool-call" in scope.get("headers", {}):
+            request = StarletteRequest(scope, receive)
+            try:
+                # Decode the tool call header to get the tool name and arguments
+                # Note: headers are bytes, so we need to decode them
+                tool_call_header = request.headers.get("x-mcp-tool-call")
+                tool_call_data = self.decode_tool_call_header(tool_call_header)
+
+                # Prepare the input for the OPA policy check
+                opa_input = {"tool_call": tool_call_data}
+                print("OPA Input:", opa_input)
+
+                # Make a POST request to the OPA server
+                response = await self.client.post(OPA_SERVER_URL, json={"input": opa_input})
+                response.raise_for_status()
+                
+                # Check the OPA policy result
+                opa_result = response.json().get("result", False)
+                if not opa_result:
+                    # Policy denied the request
+                    response_body = {"error": "Request denied by policy."}
+                    response = JSONResponse(response_body, status_code=403)
+                    await response(scope, receive, send)
+                    return
+
+            except httpx.HTTPStatusError as e:
+                # OPA server returned an error (e.g., 404, 500)
+                response_body = {"error": f"OPA server error: {e.response.text}"}
+                response = JSONResponse(response_body, status_code=500)
+                await response(scope, receive, send)
+                return
+            except Exception as e:
+                # Other errors (e.g., decoding header, invalid JSON)
+                response_body = {"error": f"Policy check failed: {str(e)}"}
+                response = JSONResponse(response_body, status_code=500)
+                await response(scope, receive, send)
+                return
+
+        # If the check passes or the request is not a tool call, proceed
+        await self.app(scope, receive, send)
+
+    def decode_tool_call_header(self, header_value: str) -> Dict[str, Any]:
+        """A simplified decoder for the tool call header."""
+        # A more robust solution would handle complex JSON/URL encoding
+        # For this example, we assume a simple JSON string.
+        import json
+        return json.loads(header_value)
 
 # Pydantic Models for structured responses
 class CommitInfo(BaseModel):
@@ -319,6 +378,7 @@ if __name__ == "__main__":
         host="127.0.0.1",
         port=8000,
         middleware=[
-            Middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],allow_credentials=True)
+            Middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],allow_credentials=True),
+            Middleware(OPAMiddleware)
         ]
     )
