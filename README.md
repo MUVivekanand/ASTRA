@@ -65,6 +65,10 @@ Follow these steps to set up and run the project:
 1. Run Gemini CLI by "gemini" command in terminal.
 2. Ensure the settings include the ngrok link for proper backend communication.
 
+### 7. OPA Setup
+
+1. Download opa_windows_amd64.exe from [https://github.com/open-policy-agent/opa/releases](https://github.com/open-policy-agent/opa/releases).
+2. Rename it as opa.exe and add it in opa/
 
 ## Notes
 
